@@ -1,0 +1,3 @@
+E:/Downloads/Labs/lab8cpp/cmake-build-debug/CMakeFiles/lab8cpp.dir
+E:/Downloads/Labs/lab8cpp/cmake-build-debug/CMakeFiles/edit_cache.dir
+E:/Downloads/Labs/lab8cpp/cmake-build-debug/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,162 @@
+.model small  
+
+.data
+    content            db "  ", 128 dup ('$')
+    program_name       db "program.exe", 0
+    file_name          db 128 dup ('$')
+
+    buffer             db 1
+    counter            db 1            
+
+    input_error        db "Invalid args.", '$'
+    file_open_error    db "Error while opening file.", '$'
+    file_reading_error db "Error while reading file.", '$'
+    prog_open_error    db "Error while executing external program.", '$'
+    
+    epb                dw 0 ; áëîê ïàðàìåòðîâ (exec parameter block)
+    cmd_off            dw offset content 
+    cmd_seg            dw ?
+    
+    EPB_len dw $-epb  ; äëèíà áëîêà EPB
+    dsize = $ - content ; äëèíà áëîêà content    
+    
+.stack 100h    
+
+.code
+process_command_line macro 
+    local end,error
+    push cx
+    push ax
+    push bx
+    push di
+    push si
+    
+    mov cl, es:80h
+    cmp cl, 0
+    je error
+    
+    mov di, 81h 
+
+    dec di
+    xor si, si
+    
+    copy_path:
+        mov al, es:[di] ; ñèìâîë ïàðàìåòðà êîìàíäíîé ñòðîêè  
+        cmp al, 13 ; ïîèñê êîíöà ñòðîêè
+        je end_line
+        mov file_name[si], al ; çàïèñü ïàðàìåòðà êàê íàçâàíèå âõîäíîãî ôàéëà
+        inc si ; ñëåä ñèìâîë ïàðàìåòðîâ
+        inc di ; ñëåä ñèìâîë èìåíè ôàéëà
+        jmp copy_path
+    
+    end_line:
+        mov file_name[si], 0
+        jmp end
+    
+    error:
+        mov ah, 9
+        mov dx, offset input_error
+        int 21h
+        jmp program_end
+    
+    end:
+        pop si
+        pop di
+        pop bx
+        pop ax
+        pop cx
+process_command_line endm
+
+start:
+    xor ax, ax
+    mov ah, 4Ah ; èçìåíèòü ðàçìåð áëîêà ïàìÿòè
+    mov bx, (csize / 16) + 17 ; íîâûé ðàçìåð â 16-áàéòíûõ ïàðàãðàôàõ
+    add bx, (dsize / 16) + 17
+    inc bx
+    int 21h
+    
+    mov ax, @data
+    mov ds, ax
+    
+    process_command_line
+    
+    mov ax, @data
+    mov es, ax
+    mov cmd_seg, ax 
+    
+    mov dx, offset file_name
+    mov ah, 3dh ; îòêðûòü ôàéë
+    mov al, 00 ; read-only
+    int 21h
+    jc fopen_error
+    
+    mov bx, ax
+    mov si, 2
+    mov counter, 1
+    
+    read:
+        mov cx, 1 ; ÷èñëî ñ÷èòûâàåìûõ áàéò
+        mov dx, offset buffer 
+        mov ah, 3fh
+        int 21h
+        jc read_error
+        cmp ax, 0
+        je read_end
+    
+        mov al, buffer
+        cmp al, 13
+        je next      
+        
+        cmp al,10
+        je read 
+        
+        mov content[si], al
+        inc si
+        inc counter
+        jmp read
+    
+    next:
+        mov content[si], ' '
+        inc si
+        inc counter
+        jmp read
+    
+    read_end:
+        mov ah, 3eh ; çàêðûòü ôàéë
+        int 21h
+        
+        cmp counter, 1
+        jle read_error
+        
+        mov dl, counter
+        mov content[0], dl ; äëèíà êîìàíäíîé ñòðîêè
+    
+        mov bx, offset epb ; áëîê epb
+        mov dx, offset program_name ; ïóòü ê ôàéëó
+        mov ax, 4b00h ; çàïóñòèòü ïðîãðàììó  
+        int 21h
+        jb prog_error
+        jmp program_end
+    
+    read_error:
+        mov ah, 9
+        mov dx, offset file_reading_error
+        int 21h
+        jmp program_end  
+    
+    fopen_error:
+        mov ah,9
+        mov dx,offset file_open_error
+        int 21h
+        jmp program_end
+    
+    prog_error:
+        mov ah,9
+        mov dx,offset prog_open_error
+        int 21h
+    
+    program_end:
+        mov ax, 4c00h
+        int 21h 
+csize=$-start ; äëèíà ïðîãðàììû
+end start
